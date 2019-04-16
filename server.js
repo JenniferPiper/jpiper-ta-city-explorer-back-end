@@ -41,17 +41,20 @@ function searchLatLng(frontEndQuery) {
 
 function searchWeather(latitude, longitude) {
   const testWeatherData = require('./data/darksky.json');
-  const summary = testWeatherData.minutely.summary;
-  const date = new Date(testWeatherData.minutely.data[0].time);
-  // convert time to human-friendly string and remove the year from the end
-  const time = date.toDateString().slice(0, -5);
-  const weatherObject = {
-    forecast: summary,
-    latitude: latitude,
-    longitude: longitude,
-    time: time
-  };
-  return weatherObject;
+  const summary = testWeatherData.daily.summary;
+  const weatherObjects = [];
+  if (testWeatherData.daily.data[0].time) {
+    const date = new Date(testWeatherData.daily.data[0].time);
+    // convert time to human-friendly string and remove the year from the end
+    const time = date.toDateString().slice(0, -5);
+    const weatherObject = {
+      forecast: summary,
+      time: time
+    };
+    weatherObjects.push(weatherObject);
+  }
+
+  return weatherObjects;
 }
 
 app.listen(PORT, () => {
