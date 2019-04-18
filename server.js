@@ -11,16 +11,22 @@ const app = express();
 app.use(cors());
 
 app.get('/location', (request, response) => {
-  console.log('request.query:', request.query);
   searchLatLng(request.query.data)
     .then(location => response.send(location))
     .catch(error => handleError(error, response));
 });
 
 app.get('/weather', (request, response) => {
-  const locationData = searchLatLng(request.query.data);
-  const weatherData = getWeather(locationData.latitude, locationData.longitude);
-  response.send(weatherData);
+  const url = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`;
+
+  superagent.get(url)
+    .then(result => {
+      const weatherData = result.body.daily.data.map(dayObj => {
+        return new DailyWeather(dayObj);
+      });
+      response.send(weatherData);
+
+    }).catch(error => handleError(error))
 })
 
 app.use('*', (request, response) => {
@@ -32,7 +38,6 @@ function searchLatLng(frontEndQuery) {
 
   return superagent.get(url)
     .then(result => {
-      console.log('result.BODY: ', result.body);
       return new Location(frontEndQuery, result);
     })
     .catch(error => console.log('JPiper city explorer error: ', error));
@@ -45,21 +50,9 @@ function Location(query, res) {
   this.longitude = res.body.results[0].geometry.location.lng;
 }
 
-function getWeather(latitude, longitude) {
-  const testWeatherData = require('./data/darksky.json');
-  const dailyWeatherData = testWeatherData.daily.data;
-
-  const weatherObjects = dailyWeatherData.map(dayObj => {
-    return new DailyWeather(dayObj);
-  });
-
-  return weatherObjects;
-}
-
 function DailyWeather(rawDayObj) {
-  const time = new Date(rawDayObj.time * 1000).toDateString();
-  this.forecast = rawDayObj.summary,
-  this.time = time
+  this.forecast = rawDayObj.summary;
+  this.time = new Date(rawDayObj.time * 1000).toDateString();
 }
 // Error handler
 function handleError(err, res) {
