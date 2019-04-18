@@ -27,7 +27,9 @@ app.get('/weather', (request, response) => {
       response.send(weatherData);
 
     }).catch(error => handleError(error))
-})
+});
+
+app.get('/meetups', getMeetups);
 
 app.use('*', (request, response) => {
   response.send('server is working!')
@@ -43,6 +45,21 @@ function searchLatLng(frontEndQuery) {
     .catch(error => console.log('JPiper city explorer error: ', error));
 }
 
+function getMeetups(request, response) {
+  const url = `https://api.meetup.com/find/upcoming_events?&sign=true&photo-host=public&lon=${request.query.data.longitude}&page=20&lat=${request.query.data.latitude}&key=${process.env.MEETUP_API_KEY}`;
+
+  superagent.get(url)
+    .then(result => {
+      const meetups = result.body.events.map(meetup => {
+        const event = new Meetup(meetup);
+        return event;
+      });
+
+      response.send(meetups);
+    })
+    .catch(error => handleError(error, response));
+}
+
 function Location(query, res) {
   this.search_query = query;
   this.formatted_query = res.body.results[0].formatted_address;
@@ -54,6 +71,15 @@ function DailyWeather(rawDayObj) {
   this.forecast = rawDayObj.summary;
   this.time = new Date(rawDayObj.time * 1000).toDateString();
 }
+function Meetup(meetup) {
+  this.link = meetup.link;
+  this.name = meetup.group.name;
+  this.creation_date = new Date(meetup.group.created).toString().slice(0, 15);
+  this.host = meetup.group.who;
+  this.created_at = Date.now();
+}
+
+
 // Error handler
 function handleError(err, res) {
   console.error('JPiper city explorer error: ', err);
