@@ -5,68 +5,85 @@ require('dotenv').config();
 const PORT = process.env.PORT || 4000;
 const express = require('express');
 const cors = require('cors');
+const superagent = require('superagent');
 
 const app = express();
 app.use(cors());
 
 app.get('/location', (request, response) => {
-  const locationData = searchLatLng(request.query.data);
-  response.send(locationData);
+  searchLatLng(request.query.data)
+    .then(location => response.send(location))
+    .catch(error => handleError(error, response));
 });
 
 app.get('/weather', (request, response) => {
-  const locationData = searchLatLng(request.query.data);
-  const weatherData = searchWeather(locationData.latitude, locationData.longitude);
-  response.send(weatherData);
-})
+  const url = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`;
+
+  superagent.get(url)
+    .then(result => {
+      const weatherData = result.body.daily.data.map(dayObj => {
+        return new DailyWeather(dayObj);
+      });
+      response.send(weatherData);
+
+    }).catch(error => handleError(error))
+});
+
+app.get('/meetups', getMeetups);
 
 app.use('*', (request, response) => {
   response.send('server is working!')
 });
 
 function searchLatLng(frontEndQuery) {
-  const search_query = frontEndQuery;
-  const testData = require('./data/geo.json');
-  const formatted_query = testData.results[0].formatted_address;
-  const latitude = testData.results[0].geometry.location.lat;
-  const longitude = testData.results[0].geometry.location.lng;
-  const responseObject = {
-    search_query,
-    formatted_query,
-    latitude,
-    longitude
-  };
-  return responseObject;
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${frontEndQuery}&key=${process.env.GEOCODE_API_KEY}`;
+
+  return superagent.get(url)
+    .then(result => {
+      return new Location(frontEndQuery, result);
+    })
+    .catch(error => console.log('JPiper city explorer error: ', error));
 }
 
-function searchWeather(latitude, longitude) {
-  const testWeatherData = require('./data/darksky.json');
-  const dailyWeatherData = testWeatherData.daily.data;
-  const weatherObjects = [];
+function getMeetups(request, response) {
+  const url = `https://api.meetup.com/find/upcoming_events?&sign=true&photo-host=public&lon=${request.query.data.longitude}&page=20&lat=${request.query.data.latitude}&key=${process.env.MEETUP_API_KEY}`;
 
-  // if (testWeatherData.daily.data[0].time) {
-  //   const date = new Date(testWeatherData.daily.data[0].time);
-  //   // convert time to human-friendly string and remove the year from the end
-  //   const time = date.toDateString().slice(0, -5) * 1000;
-  //   const weatherObject = {
-  //     forecast: summary,
-  //     time: time
-  //   };
-  //   weatherObjects.push(weatherObject);
-  // }
+  superagent.get(url)
+    .then(result => {
+      const meetups = result.body.events.map(meetup => {
+        const event = new Meetup(meetup);
+        return event;
+      });
 
-  dailyWeatherData.forEach( dayObj => {
-    weatherObjects.push(new DailyWeather(dayObj));
-  });
+      response.send(meetups);
+    })
+    .catch(error => handleError(error, response));
+}
 
-  return weatherObjects;
+function Location(query, res) {
+  this.search_query = query;
+  this.formatted_query = res.body.results[0].formatted_address;
+  this.latitude = res.body.results[0].geometry.location.lat;
+  this.longitude = res.body.results[0].geometry.location.lng;
 }
 
 function DailyWeather(rawDayObj) {
-  //const time = new Date(rawDayObj.time).toDateString() * 1000;
-  const time = new Date(rawDayObj.time * 1000).toDateString();
-  this.forecast = rawDayObj.summary,
-  this.time = time
+  this.forecast = rawDayObj.summary;
+  this.time = new Date(rawDayObj.time * 1000).toDateString();
+}
+function Meetup(meetup) {
+  this.link = meetup.link;
+  this.name = meetup.group.name;
+  this.creation_date = new Date(meetup.group.created).toString().slice(0, 15);
+  this.host = meetup.group.who;
+  this.created_at = Date.now();
+}
+
+
+// Error handler
+function handleError(err, res) {
+  console.error('JPiper city explorer error: ', err);
+  if (res) res.status(500).send('Sorry, something went wrong');
 }
 
 app.listen(PORT, () => {
